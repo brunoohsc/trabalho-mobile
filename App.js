@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, FlatList, TouchableOpacity, StyleSheet, Vibration, Alert, Platform, ScrollView, ActivityIndicator, Share } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Vibration, Alert, Platform, ScrollView, ActivityIndicator, Share } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { collection, addDoc, getDocs, query } from 'firebase/firestore';
+import { collection, addDoc, query, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
 
 const Stack = createNativeStackNavigator();
-
 
 const calcularResultadosBFP = (respostas) => {
   const somar = (itens) => itens.reduce((acc, item) => acc + (parseInt(respostas[item]) || 0), 0);
@@ -109,7 +108,7 @@ const perguntasBFP = [
   { id: '57', texto: '57. Acho que os outros zombam de mim.' },
   { id: '58', texto: '58. Costumo fazer sacrifícios para conseguir o que quero.' },
   { id: '59', texto: '59. Acho natural que os valores morais mudem ao longo do tempo.' },
-  { id: '60', texto: '60. Tenho muito medo de que os meus amigos deixem de gostar de mim.' },
+  { id: '60', text: '60. Tenho muito medo de que os meus amigos deixem de gostar de mim.' },
   { id: '61', texto: '61. Tento incentivar pessoas.' },
   { id: '62', texto: '62. Sou uma pessoa com pouca imaginação.' },
   { id: '63', texto: '63. Faço coisas consideradas perigosas.' },
@@ -128,7 +127,7 @@ const perguntasBFP = [
   { id: '76', texto: '76. Preocupo-me em agir segundo as leis.' },
   { id: '77', texto: '77. Meu humor varia constantemente.' },
   { id: '78', texto: '78. Necessito estar no centro das atenções.' },
-  { id: '79', texto: '79. Sinto-me muito inseguro quando tenho que fazer coisas que nunca fiz antes.' },
+  { id: '79', texto: '79. Sinto-me muito insecure quando tenho que fazer coisas que nunca fiz antes.' },
   { id: '80', texto: '80. As pessoas dizem que sou muito detalhista.' },
   { id: '81', texto: '81. Evito discussões filosóficas.' },
   { id: '82', texto: '82. Não gosto de expressar as minhas ideias, pois tenho medo de ser ridicularizado.' },
@@ -164,7 +163,7 @@ const perguntasBFP = [
   { id: '112', texto: '112. Meus amigos dizem que eu trabalho/estudo demais.' },
   { id: '113', texto: '113. Sinto-me entediado quando tenho que fazer as mesmas coisas.' },
   { id: '114', texto: '114. Exijo muito de mim mesmo.' },
-  { id: '115', texto: '115. Tenho dificuldade para participar de atividades que exijam imaginação ou fantasia.' },
+  { id: '115', texto: '115. Tenia dificuldade para participar de atividades que exijam imaginação ou fantasia.' },
   { id: '116', texto: '116. Gosto de programar detalhadamente as coisas que tenho para fazer.' },
   { id: '117', texto: '117. Usualmente, tomo iniciativa nas situações.' },
   { id: '118', texto: '118. Sinto-me muito mal quando recebo alguma crítica.' },
@@ -178,57 +177,103 @@ const perguntasBFP = [
   { id: '126', texto: '126. Sou disposto a rever meu posicionamento sobre diferentes assuntos.' }
 ];
 
-// tela 1
 function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [loadingLogin, setLoadingLogin] = useState(false);
 
   const handleLogin = async () => {
+    if (!email || !senha) return Alert.alert("Atenção", "Preencha e-mail e senha.");
+    setLoadingLogin(true);
     try {
       await signInWithEmailAndPassword(auth, email, senha);
-      await AsyncStorage.removeItem('@bfp_progresso'); 
-      navigation.navigate('Instrucoes'); 
+      await AsyncStorage.removeItem('@bfp_progresso');
+      navigation.navigate('Instrucoes');
     } catch (error) {
-      Alert.alert("Erro de Login", error.message);
+      Alert.alert("Erro de Login", "Verifique suas credenciais.");
     }
+    setLoadingLogin(false);
   };
 
   const handleCadastro = async () => {
+    if (!email || !senha) return Alert.alert("Atenção", "Preencha e-mail e senha.");
+    setLoadingLogin(true);
     try {
       await createUserWithEmailAndPassword(auth, email, senha);
-      await AsyncStorage.removeItem('@bfp_progresso'); 
-      Alert.alert("Sucesso", "Conta criada com sucesso! Faça login para continuar.");
+      await AsyncStorage.removeItem('@bfp_progresso');
+      Alert.alert("Sucesso", "Conta criada! Faça login para continuar.");
     } catch (error) {
       Alert.alert("Erro de Cadastro", error.message);
     }
+    setLoadingLogin(false);
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>BFP - Teste Psicológico</Text>
-      <TextInput style={styles.input} placeholder="E-mail do Paciente" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-      <TextInput style={styles.input} placeholder="Senha" value={senha} onChangeText={setSenha} secureTextEntry />
-      <Button title="ENTRAR PARA FAZER TESTE" onPress={handleLogin} color="#2196F3" />
-      <View style={{ height: 10 }} />
-      <Button title="CADASTRAR NOVO PACIENTE" onPress={handleCadastro} color="#4CAF50" />
-      
-      <View style={{ marginTop: 40 }}>
-        <Text style={{textAlign: 'center', marginBottom: 10, color: '#666'}}>Área do Profissional</Text>
-        <Button title="SOU PSICÓLOGA (VER PACIENTES)" onPress={() => navigation.navigate('PainelPsicologa')} color="#9C27B0" />
+    <ScrollView contentContainerStyle={styles.containerLogin}>
+      <View style={styles.headerLogin}>
+        <Text style={styles.titleLogin}>Avaliação BFP</Text>
+        <Text style={styles.subtitleLogin}>Acesso do Paciente</Text>
       </View>
-    </View>
+
+      <View style={styles.cardLogin}>
+        <Text style={styles.labelInput}>Credenciais</Text>
+        <TextInput
+          style={styles.inputCustom}
+          placeholder="E-mail"
+          placeholderTextColor="#9CA3AF"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        <TextInput
+          style={styles.inputCustom}
+          placeholder="Senha"
+          placeholderTextColor="#9CA3AF"
+          value={senha}
+          onChangeText={setSenha}
+          secureTextEntry
+        />
+
+        <TouchableOpacity
+          style={[styles.btnPrimary, loadingLogin && { opacity: 0.7 }]}
+          onPress={handleLogin}
+          disabled={loadingLogin}
+        >
+          {loadingLogin ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.txtBtnPrimary}>ENTRAR</Text>}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.btnSecondary} onPress={handleCadastro} disabled={loadingLogin}>
+          <Text style={styles.txtBtnSecondary}>CADASTRAR</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.separatorContainer}>
+        <View style={styles.separatorLine} />
+        <Text style={styles.separatorText}>OU</Text>
+        <View style={styles.separatorLine} />
+      </View>
+
+      <View style={styles.areaProfissional}>
+        <Text style={styles.textoAcessoRestrito}>Acesso restrito a profissionais</Text>
+        <TouchableOpacity
+          style={styles.btnPsicologa}
+          onPress={() => navigation.navigate('PainelPsicologa')}
+        >
+          <Text style={styles.txtBtnPsicologa}>ÁREA DA PSICÓLOGA</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
-// tela psicologa
 function PainelPsicologaScreen({ navigation }) {
   const [pacientes, setPacientes] = useState([]);
   const [carregando, setCarregando] = useState(true);
 
-  const buscarPacientes = async () => {
-    try {
-      const q = query(collection(db, "resultadosBFP"));
-      const querySnapshot = await getDocs(q);
+  useEffect(() => {
+    const q = query(collection(db, "resultadosBFP"));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const lista = [];
       querySnapshot.forEach((doc) => {
         lista.push({ id: doc.id, ...doc.data() });
@@ -236,89 +281,99 @@ function PainelPsicologaScreen({ navigation }) {
       lista.sort((a, b) => new Date(b.data) - new Date(a.data));
       setPacientes(lista);
       setCarregando(false);
-    } catch (erro) {
-      Alert.alert("Erro", "Não foi possível carregar os testes do banco de dados.");
+    }, (erro) => {
+      Alert.alert("Erro", "Não foi possível sincronizar os dados.");
       setCarregando(false);
-    }
-  };
+    });
 
-  useEffect(() => {
-    buscarPacientes();
+    return () => unsubscribe();
   }, []);
 
-  if (carregando) return <View style={styles.container}><ActivityIndicator size="large" color="#9C27B0" /></View>;
-
   return (
-    <View style={styles.containerTeste}>
-      <Text style={styles.title}>Painel de Pacientes</Text>
-      <Text style={{marginBottom: 15, textAlign: 'center'}}>Lista de testes salvos no banco de dados:</Text>
-      
-      {pacientes.length === 0 ? (
-        <Text style={{textAlign: 'center', color: '#666'}}>Nenhum teste salvo ainda.</Text>
+    <View style={styles.containerGeral}>
+      {carregando ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#8B5CF6" />
+          <Text style={styles.loadingText}>Sincronizando dados...</Text>
+        </View>
       ) : (
-        <FlatList
-          data={pacientes}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
-            const dataFormatada = new Date(item.data).toLocaleDateString('pt-BR');
-            return (
-              <View style={styles.cardPaciente}>
-                <Text style={{fontWeight: 'bold', fontSize: 16, color: '#333'}}>Email: {item.usuario}</Text>
-                <Text style={{color: '#666', marginBottom: 10}}>Data do Teste: {dataFormatada}</Text>
-                
-                <Text style={styles.textoFatorLista}>Neuroticismo: {item.resultadosFinais.Neuroticismo.Geral.toFixed(2)}</Text>
-                <Text style={styles.textoFatorLista}>Extroversão: {item.resultadosFinais.Extroversao.Geral.toFixed(2)}</Text>
-                <Text style={styles.textoFatorLista}>Socialização: {item.resultadosFinais.Socializacao.Geral.toFixed(2)}</Text>
-                <Text style={styles.textoFatorLista}>Realização: {item.resultadosFinais.Realizacao.Geral.toFixed(2)}</Text>
-                <Text style={styles.textoFatorLista}>Abertura: {item.resultadosFinais.Abertura.Geral.toFixed(2)}</Text>
-              </View>
-            );
-          }}
-        />
+        <>
+          <Text style={styles.subtituloPainel}>Testes registrados no sistema</Text>
+          {pacientes.length === 0 ? (
+            <Text style={styles.textoVazio}>Nenhum teste foi realizado ainda.</Text>
+          ) : (
+            <FlatList
+              data={pacientes}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const dataFormatada = new Date(item.data).toLocaleDateString('pt-BR');
+                return (
+                  <View style={styles.cardPaciente}>
+                    <View style={styles.headerPaciente}>
+                      <Text style={styles.emailPaciente}>{item.usuario}</Text>
+                      <Text style={styles.dataPaciente}>{dataFormatada}</Text>
+                    </View>
+                    <View style={styles.resultadoRow}>
+                      <Text style={styles.textoFatorLista}>Neuroticismo</Text>
+                      <Text style={styles.textoFatorValor}>{item.resultadosFinais.Neuroticismo.Geral.toFixed(2)}</Text>
+                    </View>
+                    <View style={styles.resultadoRow}>
+                      <Text style={styles.textoFatorLista}>Extroversão</Text>
+                      <Text style={styles.textoFatorValor}>{item.resultadosFinais.Extroversao.Geral.toFixed(2)}</Text>
+                    </View>
+                    <View style={styles.resultadoRow}>
+                      <Text style={styles.textoFatorLista}>Socialização</Text>
+                      <Text style={styles.textoFatorValor}>{item.resultadosFinais.Socializacao.Geral.toFixed(2)}</Text>
+                    </View>
+                    <View style={styles.resultadoRow}>
+                      <Text style={styles.textoFatorLista}>Realização</Text>
+                      <Text style={styles.textoFatorValor}>{item.resultadosFinais.Realizacao.Geral.toFixed(2)}</Text>
+                    </View>
+                    <View style={styles.resultadoRowSemBorda}>
+                      <Text style={styles.textoFatorLista}>Abertura</Text>
+                      <Text style={styles.textoFatorValor}>{item.resultadosFinais.Abertura.Geral.toFixed(2)}</Text>
+                    </View>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </>
       )}
-      <View style={{marginTop: 20}}>
-        <Button title="VOLTAR" onPress={() => navigation.goBack()} color="#9C27B0" />
-      </View>
     </View>
   );
 }
 
-//  tela de instruçoes
 function InstrucoesScreen({ navigation }) {
   return (
     <ScrollView contentContainerStyle={styles.containerScroll}>
-      <Text style={styles.title}>Instruções do Teste</Text>
-      
       <Text style={styles.textoInstrucao}>
         Abaixo você encontrará uma série de frases. Leia cada uma delas cuidadosamente e indique o quanto a frase descreve você.
       </Text>
-      
-      <Text style={styles.textoInstrucao}>
-        Use a escala de 1 a 7, onde:
-      </Text>
 
       <View style={styles.caixaEscala}>
+        <Text style={styles.tituloEscala}>Escala de Respostas</Text>
         <Text style={styles.itemEscala}>1 - Descreve muito mal</Text>
         <Text style={styles.itemEscala}>2 - Descreve mal</Text>
         <Text style={styles.itemEscala}>3 - Descreve um pouco mal</Text>
-        <Text style={styles.itemEscala}>4 - Não descreve nem bem, nem mal (Neutro)</Text>
+        <Text style={styles.itemEscala}>4 - Neutro</Text>
         <Text style={styles.itemEscala}>5 - Descreve um pouco bem</Text>
         <Text style={styles.itemEscala}>6 - Descreve bem</Text>
         <Text style={styles.itemEscala}>7 - Descreve muito bem</Text>
       </View>
 
-      <Text style={styles.textoInstrucao}>
-        Responda o mais sinceramente possível. Não há respostas certas ou erradas. Tente não deixar nenhuma questão em branco. O teste possui 126 questões.
+      <Text style={styles.textoInstrucaoDestaque}>
+        Responda o mais sinceramente possível. Tente não deixar nenhuma questão em branco. O teste possui 126 questões.
       </Text>
 
-      <View style={{ marginTop: 20, marginBottom: 40 }}>
-        <Button title="INICIAR TESTE" onPress={() => navigation.navigate('Teste')} color="#FF9800" />
-      </View>
+      <TouchableOpacity style={styles.btnIniciar} onPress={() => navigation.navigate('Teste')}>
+        <Text style={styles.txtBtnIniciar}>INICIAR TESTE AGORA</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
 
-// tela 3 o teste
 function TesteScreen({ navigation }) {
   const [respostas, setRespostas] = useState({});
   const [carregando, setCarregando] = useState(true);
@@ -344,8 +399,7 @@ function TesteScreen({ navigation }) {
     const respondidas = Object.keys(respostas);
     const faltantes = perguntasBFP.filter(p => !respondidas.includes(p.id)).map(p => p.id);
     let respostasCompletas = { ...respostas };
-    
-  
+
     faltantes.forEach(id => { respostasCompletas[id] = 4; });
     const resultadosCalculados = calcularResultadosBFP(respostasCompletas);
 
@@ -355,34 +409,41 @@ function TesteScreen({ navigation }) {
         respostasBrutas: respostasCompletas,
         resultadosFinais: resultadosCalculados,
         data: new Date().toISOString()
-      }).catch(() => console.log("Erro de rede ignorado"));
+      }).catch(() => {});
     } catch (e) {}
 
     if (Platform.OS !== 'web') Vibration.vibrate(500);
 
-    AsyncStorage.removeItem('@bfp_progresso'); 
+    AsyncStorage.removeItem('@bfp_progresso');
     navigation.navigate('Resultados', { resultados: resultadosCalculados });
   };
 
-  if (carregando) return <View style={styles.container}><ActivityIndicator size="large" /></View>;
+  if (carregando) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#4F46E5" /></View>;
 
   return (
-    <View style={styles.containerTeste}>
+    <View style={styles.containerGeral}>
       <FlatList
         data={perguntasBFP}
         keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
         ListFooterComponent={() => (
-          <TouchableOpacity style={styles.botaoFinalizar} onPress={finalizarTeste}>
-            <Text style={styles.textoBotaoFinalizar}>FINALIZAR E VER RESULTADOS</Text>
+          <TouchableOpacity style={styles.btnFinalizar} onPress={finalizarTeste}>
+            <Text style={styles.txtBtnFinalizar}>FINALIZAR E VER RESULTADOS</Text>
           </TouchableOpacity>
         )}
         renderItem={({ item }) => (
-          <View style={styles.card}>
+          <View style={styles.cardPergunta}>
             <Text style={styles.perguntaTexto}>{item.texto}</Text>
             <View style={styles.opcoesContainer}>
               {[1, 2, 3, 4, 5, 6, 7].map((num) => (
-                <TouchableOpacity key={num} style={[styles.botaoOpcao, respostas[item.id] === num && styles.botaoSelecionado]} onPress={() => responder(item.id, num)}>
-                  <Text style={respostas[item.id] === num ? {color: '#fff', fontWeight: 'bold'} : {color: '#000'}}>{num}</Text>
+                <TouchableOpacity
+                  key={num}
+                  style={[styles.botaoOpcao, respostas[item.id] === num && styles.botaoSelecionado]}
+                  onPress={() => responder(item.id, num)}
+                >
+                  <Text style={[styles.textoBotaoOpcao, respostas[item.id] === num && styles.textoBotaoOpcaoSelecionado]}>
+                    {num}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -393,21 +454,20 @@ function TesteScreen({ navigation }) {
   );
 }
 
-// tela do botao de compartilhar
 function ResultadosScreen({ route, navigation }) {
   const { resultados } = route.params;
 
   const compartilharResultados = async () => {
     try {
       const emailPaciente = auth.currentUser?.email || "Paciente Anônimo";
-      const textoFormatado = `RESULTADOS BFP\nPaciente: ${emailPaciente}\nData: ${new Date().toLocaleDateString('pt-BR')}\n\n` + 
+      const textoFormatado = `RESULTADOS BFP\nPaciente: ${emailPaciente}\nData: ${new Date().toLocaleDateString('pt-BR')}\n\n` +
         `Neuroticismo: ${resultados.Neuroticismo.Geral.toFixed(2)}\n` +
         `Extroversão: ${resultados.Extroversao.Geral.toFixed(2)}\n` +
         `Socialização: ${resultados.Socializacao.Geral.toFixed(2)}\n` +
         `Realização: ${resultados.Realizacao.Geral.toFixed(2)}\n` +
         `Abertura: ${resultados.Abertura.Geral.toFixed(2)}\n`;
 
-      await Share.share({ 
+      await Share.share({
         message: textoFormatado,
         title: `Relatório BFP - ${emailPaciente}`
       });
@@ -418,22 +478,27 @@ function ResultadosScreen({ route, navigation }) {
 
   return (
     <ScrollView contentContainerStyle={styles.containerScroll}>
-      <Text style={styles.title}>Resultados</Text>
-      {Object.entries(resultados).map(([nome, dados]) => (
-        <View key={nome} style={styles.cardResultado}>
-          <Text style={styles.tituloFator}>{nome}: {dados.Geral.toFixed(2)}</Text>
-        </View>
-      ))}
-      <View style={{ marginTop: 20, marginBottom: 40 }}>
-        <Button title="COMPARTILHAR COM A PSICÓLOGA" onPress={compartilharResultados} color="#2196F3" />
-        <View style={{ height: 15 }} />
-        <Button title="VOLTAR AO INÍCIO" onPress={() => navigation.popToTop()} color="#4CAF50" />
+      <Text style={styles.subtituloPainel}>Relatório Final do Paciente</Text>
+      <View style={styles.gridResultados}>
+        {Object.entries(resultados).map(([nome, dados]) => (
+          <View key={nome} style={styles.cardResultado}>
+            <Text style={styles.tituloFator}>{nome}</Text>
+            <Text style={styles.pontuacaoFator}>{dados.Geral.toFixed(2)}</Text>
+          </View>
+        ))}
+      </View>
+      <View style={styles.containerAcoes}>
+        <TouchableOpacity style={styles.btnOutline} onPress={compartilharResultados}>
+          <Text style={styles.txtBtnOutline}>COMPARTILHAR RESULTADOS</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.btnPrimary} onPress={() => navigation.popToTop()}>
+          <Text style={styles.txtBtnPrimary}>VOLTAR AO INÍCIO</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
 }
 
-//
 export default function App() {
   const [appPronto, setAppPronto] = useState(false);
 
@@ -445,48 +510,98 @@ export default function App() {
 
   if (!appPronto) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#0000ff" />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4F46E5" />
       </View>
     );
   }
 
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Login">
+      <Stack.Navigator
+        initialRouteName="Login"
+        screenOptions={{
+          headerStyle: { backgroundColor: '#F4F7F6' },
+          headerShadowVisible: false,
+          headerTintColor: '#1F2937',
+          headerTitleStyle: { fontWeight: '700' },
+        }}
+      >
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="PainelPsicologa" component={PainelPsicologaScreen} options={{ title: 'Área da Psicóloga' }} />
-        <Stack.Screen name="Instrucoes" component={InstrucoesScreen} />
-        <Stack.Screen name="Teste" component={TesteScreen} />
-        <Stack.Screen name="Resultados" component={ResultadosScreen} options={{ headerBackVisible: false }} />
+        <Stack.Screen name="PainelPsicologa" component={PainelPsicologaScreen} options={{ title: 'Área da Profissional', headerTintColor: '#8B5CF6' }} />
+        <Stack.Screen name="Instrucoes" component={InstrucoesScreen} options={{ title: 'Instruções' }} />
+        <Stack.Screen name="Teste" component={TesteScreen} options={{ title: 'Avaliação BFP' }} />
+        <Stack.Screen name="Resultados" component={ResultadosScreen} options={{ headerBackVisible: false, title: 'Resultados' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
 
-// estilos
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: 'center', backgroundColor: '#f4f4f9' },
-  containerScroll: { flexGrow: 1, padding: 20, backgroundColor: '#f4f4f9' },
-  containerTeste: { flex: 1, padding: 20, backgroundColor: '#f4f4f9' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 12, marginBottom: 15, borderRadius: 8, backgroundColor: '#fff' },
-  card: { backgroundColor: '#fff', padding: 15, marginBottom: 15, borderRadius: 8, elevation: 2 },
-  perguntaTexto: { marginBottom: 10, fontSize: 16 },
-  opcoesContainer: { flexDirection: 'row', justifyContent: 'space-between' },
-  botaoOpcao: { padding: 10, borderWidth: 1, borderColor: '#ddd', borderRadius: 5, width: 35, alignItems: 'center' },
-  botaoSelecionado: { backgroundColor: '#2196F3', borderColor: '#2196F3' },
-  botaoFinalizar: { backgroundColor: '#4CAF50', padding: 18, borderRadius: 8, alignItems: 'center', marginTop: 20, marginBottom: 50 },
-  textoBotaoFinalizar: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  cardResultado: { backgroundColor: '#fff', padding: 15, marginBottom: 10, borderRadius: 8, elevation: 2 },
-  tituloFator: { fontSize: 18, fontWeight: 'bold' },
-  
-  
-  cardPaciente: { backgroundColor: '#fff', padding: 15, marginBottom: 10, borderRadius: 8, borderLeftWidth: 5, borderLeftColor: '#9C27B0', elevation: 2 },
-  textoFatorLista: { fontSize: 14, color: '#444' },
+  containerGeral: { flex: 1, padding: 20, backgroundColor: '#F4F7F6' },
+  containerScroll: { flexGrow: 1, padding: 20, backgroundColor: '#F4F7F6' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F7F6' },
+  loadingText: { marginTop: 12, color: '#6B7280', fontSize: 15, fontWeight: '500' },
 
+  containerLogin: { flexGrow: 1, padding: 24, justifyContent: 'center', backgroundColor: '#F4F7F6' },
+  headerLogin: { alignItems: 'center', marginBottom: 40 },
+  titleLogin: { fontSize: 32, fontWeight: '800', color: '#1F2937', letterSpacing: -0.5 },
+  subtitleLogin: { fontSize: 16, color: '#6B7280', marginTop: 8, fontWeight: '500' },
 
-  textoInstrucao: { fontSize: 16, marginBottom: 15, lineHeight: 22, color: '#333' },
-  caixaEscala: { backgroundColor: '#fff', padding: 15, borderRadius: 8, marginBottom: 20, borderWidth: 1, borderColor: '#ddd' },
-  itemEscala: { fontSize: 15, marginBottom: 8, color: '#444', fontWeight: '500' }
+  cardLogin: { backgroundColor: '#FFFFFF', padding: 28, borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4 },
+  labelInput: { fontSize: 13, fontWeight: '700', color: '#4B5563', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  inputCustom: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 16, fontSize: 16, color: '#1F2937', marginBottom: 16 },
+
+  btnPrimary: { backgroundColor: '#4F46E5', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 8, shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  txtBtnPrimary: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', letterSpacing: 0.5 },
+  btnSecondary: { backgroundColor: '#F3F4F6', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 12 },
+  txtBtnSecondary: { color: '#4B5563', fontSize: 15, fontWeight: '700' },
+
+  separatorContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 35, paddingHorizontal: 10 },
+  separatorLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+  separatorText: { marginHorizontal: 15, color: '#9CA3AF', fontSize: 12, fontWeight: '600' },
+
+  areaProfissional: { alignItems: 'center', paddingBottom: 20 },
+  textoAcessoRestrito: { color: '#6B7280', fontSize: 13, marginBottom: 12, fontWeight: '500' },
+  btnPsicologa: { backgroundColor: '#F5F3FF', borderWidth: 1, borderColor: '#DDD6FE', borderRadius: 12, paddingVertical: 16, paddingHorizontal: 24, alignItems: 'center', width: '100%' },
+  txtBtnPsicologa: { color: '#8B5CF6', fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
+
+  subtituloPainel: { fontSize: 16, fontWeight: '600', color: '#6B7280', marginBottom: 20, textAlign: 'center' },
+  textoVazio: { textAlign: 'center', color: '#9CA3AF', marginTop: 30, fontSize: 15 },
+
+  cardPaciente: { backgroundColor: '#FFFFFF', padding: 20, marginBottom: 16, borderRadius: 16, borderLeftWidth: 6, borderLeftColor: '#8B5CF6', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  headerPaciente: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  emailPaciente: { fontWeight: '700', fontSize: 15, color: '#1F2937', flex: 1 },
+  dataPaciente: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
+  resultadoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  resultadoRowSemBorda: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
+  textoFatorLista: { fontSize: 14, color: '#4B5563', fontWeight: '500' },
+  textoFatorValor: { fontSize: 14, color: '#1F2937', fontWeight: '700' },
+
+  textoInstrucao: { fontSize: 16, marginBottom: 20, lineHeight: 26, color: '#374151' },
+  textoInstrucaoDestaque: { fontSize: 15, marginTop: 10, marginBottom: 30, lineHeight: 24, color: '#4B5563', fontStyle: 'italic', textAlign: 'center' },
+  caixaEscala: { backgroundColor: '#FFFFFF', padding: 24, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
+  tituloEscala: { fontSize: 14, fontWeight: '700', color: '#1F2937', marginBottom: 16, textTransform: 'uppercase', letterSpacing: 0.5 },
+  itemEscala: { fontSize: 15, marginBottom: 12, color: '#4B5563', fontWeight: '500' },
+  btnIniciar: { backgroundColor: '#10B981', borderRadius: 12, paddingVertical: 18, alignItems: 'center', shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  txtBtnIniciar: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
+
+  cardPergunta: { backgroundColor: '#FFFFFF', padding: 24, marginBottom: 20, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
+  perguntaTexto: { marginBottom: 20, fontSize: 16, color: '#1F2937', lineHeight: 24, fontWeight: '600' },
+  opcoesContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  botaoOpcao: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: '#D1D5DB', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' },
+  botaoSelecionado: { backgroundColor: '#4F46E5', borderColor: '#4F46E5' },
+  textoBotaoOpcao: { color: '#4B5563', fontSize: 15, fontWeight: '600' },
+  textoBotaoOpcaoSelecionado: { color: '#FFFFFF', fontWeight: '700' },
+
+  btnFinalizar: { backgroundColor: '#10B981', padding: 18, borderRadius: 12, alignItems: 'center', marginTop: 10, marginBottom: 40, shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  txtBtnFinalizar: { color: '#FFFFFF', fontWeight: '700', fontSize: 15, letterSpacing: 0.5 },
+
+  gridResultados: { marginBottom: 10 },
+  cardResultado: { backgroundColor: '#FFFFFF', padding: 20, marginBottom: 16, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  tituloFator: { fontSize: 16, fontWeight: '600', color: '#4B5563' },
+  pontuacaoFator: { fontSize: 22, fontWeight: '800', color: '#4F46E5' },
+  containerAcoes: { marginTop: 20, marginBottom: 40, gap: 16 },
+  btnOutline: { backgroundColor: '#FFFFFF', borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: '#4F46E5' },
+  txtBtnOutline: { color: '#4F46E5', fontSize: 15, fontWeight: '700', letterSpacing: 0.5 }
 });
